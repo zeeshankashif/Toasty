@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef, Component, ErrorInfo, ReactNode } from 'react';
 import { 
   onAuthStateChanged, 
-  User 
+  User,
+  signInAnonymously
 } from 'firebase/auth';
 import { 
   collection, 
@@ -467,15 +468,18 @@ export default function App() {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (u) => {
-      setUser(u);
       if (u) {
-        // Ensure user profile exists
-        const userDoc = await getDoc(doc(db, 'users', u.uid));
-        if (!userDoc.exists()) {
-          await setDoc(doc(db, 'users', u.uid), {
-            displayName: u.displayName || 'Anonymous Chef',
-            photoURL: u.photoURL || ''
-          });
+        setUser(u);
+        try {
+          const userDoc = await getDoc(doc(db, 'users', u.uid));
+          if (!userDoc.exists()) {
+            await setDoc(doc(db, 'users', u.uid), {
+              displayName: u.displayName || 'Anonymous Chef',
+              photoURL: u.photoURL || ''
+            });
+          }
+        } catch (e) {
+          console.error("Failed to create user profile in Firestore:", e);
         }
 
         // Cleanup old data (older than 24 hours)
@@ -531,8 +535,27 @@ export default function App() {
         } catch (error) {
           console.error("Error cleaning up old data:", error);
         }
+        setLoading(false);
+      } else {
+        // Automatically sign in anonymously if there is no user session
+        try {
+          await signInAnonymously(auth);
+        } catch (error) {
+          console.error("Anonymous authentication failed, using fallback guest user:", error);
+          setUser({
+            uid: 'local-guest-user',
+            displayName: 'Guest Chef',
+            photoURL: '',
+            email: 'guest@toasty.local',
+            emailVerified: true,
+            isAnonymous: true,
+            metadata: {},
+            providerData: [],
+            tenantId: null
+          } as any);
+          setLoading(false);
+        }
       }
-      setLoading(false);
     });
     return () => unsubscribe();
   }, []);
@@ -541,6 +564,45 @@ export default function App() {
   useEffect(() => {
     if (!user) {
       setHouseholdsLoading(false);
+      return;
+    }
+    if (user.uid === 'local-guest-user') {
+      const stored = localStorage.getItem('toasty_households');
+      if (stored) {
+        try {
+          const h = JSON.parse(stored);
+          setHouseholds(h);
+          setHouseholdsLoading(false);
+          setSelectedHousehold(prev => {
+            if (!prev) return h[0];
+            const updated = h.find((hh: any) => hh.id === prev.id);
+            return updated || h[0];
+          });
+          return;
+        } catch (e) {
+          console.error("Error parsing stored households:", e);
+        }
+      }
+      const defaultH: Household = {
+        id: 'local-default-household',
+        name: 'My Kitchen',
+        ownerId: 'local-guest-user',
+        members: { 'local-guest-user': 'admin' }
+      };
+      setHouseholds([defaultH]);
+      setHouseholdsLoading(false);
+      setSelectedHousehold(defaultH);
+      localStorage.setItem('toasty_households', JSON.stringify([defaultH]));
+      
+      // Write stock recipes for this local household
+      const defaultRecipes = STOCK_RECIPES.map((r, idx) => ({
+        ...r,
+        id: `local-recipe-${idx}`,
+        authorId: 'local-guest-user',
+        householdId: 'local-default-household',
+        createdAt: Timestamp.now()
+      }));
+      localStorage.setItem('toasty_recipes_local-default-household', JSON.stringify(defaultRecipes));
       return;
     }
     setHouseholdsLoading(true);
@@ -570,6 +632,21 @@ export default function App() {
       setRecipes([]);
       return;
     }
+    if (user.uid === 'local-guest-user') {
+      const key = `toasty_recipes_${selectedHousehold.id}`;
+      const stored = localStorage.getItem(key);
+      if (stored) {
+        try {
+          const r = JSON.parse(stored);
+          setRecipes(r);
+          return;
+        } catch (e) {
+          console.error("Error parsing local recipes:", e);
+        }
+      }
+      setRecipes([]);
+      return;
+    }
     const q = query(collection(db, 'recipes'), where('householdId', '==', selectedHousehold.id));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const fetchedRecipes = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Recipe));
@@ -588,6 +665,37 @@ export default function App() {
   const handleCreateHousehold = async (name: string) => {
     if (!user) return;
     setIsProcessing(true);
+
+    if (user.uid === 'local-guest-user') {
+      const newId = `local-household-${Date.now()}`;
+      const newH: Household = {
+        id: newId,
+        name,
+        ownerId: 'local-guest-user',
+        members: { 'local-guest-user': 'admin' }
+      };
+      
+      const updatedHouseholds = [...households, newH];
+      setHouseholds(updatedHouseholds);
+      localStorage.setItem('toasty_households', JSON.stringify(updatedHouseholds));
+      
+      // Stock recipes for this household in localStorage
+      const defaultRecipes = STOCK_RECIPES.map((r, idx) => ({
+        ...r,
+        id: `local-recipe-${newId}-${idx}`,
+        authorId: 'local-guest-user',
+        householdId: newId,
+        createdAt: Timestamp.now()
+      }));
+      localStorage.setItem(`toasty_recipes_${newId}`, JSON.stringify(defaultRecipes));
+      
+      setSelectedHousehold(newH);
+      setIsHouseholdModalOpen(false);
+      setIsFirstFamilyModalOpen(true);
+      setIsProcessing(false);
+      return;
+    }
+
     try {
       const newH = {
         name,
@@ -620,6 +728,17 @@ export default function App() {
 
   const handleDeleteHousehold = async (householdId: string) => {
     if (!user) return;
+    if (user.uid === 'local-guest-user') {
+      const updatedHouseholds = households.filter(h => h.id !== householdId);
+      setHouseholds(updatedHouseholds);
+      localStorage.setItem('toasty_households', JSON.stringify(updatedHouseholds));
+      localStorage.removeItem(`toasty_recipes_${householdId}`);
+      
+      setSelectedHousehold(updatedHouseholds[0] || null);
+      setIsDeleteHouseholdConfirmOpen(false);
+      setIsHouseholdModalOpen(false);
+      return;
+    }
     try {
       // 1. Delete all recipes in the household
       const rQuery = query(collection(db, 'recipes'), where('householdId', '==', householdId));
@@ -662,6 +781,37 @@ export default function App() {
       Object.entries(recipeData).filter(([_, v]) => v !== undefined)
     );
 
+    if (user.uid === 'local-guest-user') {
+      const key = `toasty_recipes_${selectedHousehold.id}`;
+      const stored = localStorage.getItem(key);
+      let localR: Recipe[] = stored ? JSON.parse(stored) : [];
+      
+      if (editingRecipe?.id) {
+        localR = localR.map(r => r.id === editingRecipe.id ? {
+          ...r,
+          ...cleanedData,
+          updatedAt: Timestamp.now()
+        } as Recipe : r);
+      } else {
+        const newR: Recipe = {
+          ...cleanedData,
+          id: `local-recipe-${Date.now()}`,
+          authorId: 'local-guest-user',
+          householdId: selectedHousehold.id,
+          createdAt: Timestamp.now(),
+          rating: cleanedData.rating || 0
+        } as Recipe;
+        localR = [newR, ...localR];
+      }
+      
+      setRecipes(localR);
+      localStorage.setItem(key, JSON.stringify(localR));
+      
+      setIsAddModalOpen(false);
+      setEditingRecipe(null);
+      return;
+    }
+
     try {
       if (editingRecipe?.id) {
         await updateDoc(doc(db, 'recipes', editingRecipe.id), {
@@ -685,6 +835,24 @@ export default function App() {
   };
 
   const handleDeleteRecipe = async (id: string) => {
+    if (user?.uid === 'local-guest-user') {
+      if (!selectedHousehold) return;
+      const key = `toasty_recipes_${selectedHousehold.id}`;
+      const stored = localStorage.getItem(key);
+      if (stored) {
+        try {
+          let localR: Recipe[] = JSON.parse(stored);
+          localR = localR.filter(r => r.id !== id);
+          setRecipes(localR);
+          localStorage.setItem(key, JSON.stringify(localR));
+        } catch (e) {
+          console.error("Error deleting local recipe:", e);
+        }
+      }
+      setViewingRecipe(null);
+      setIsDeleteConfirmOpen(false);
+      return;
+    }
     try {
       await deleteDoc(doc(db, 'recipes', id));
       setViewingRecipe(null);
@@ -814,23 +982,8 @@ export default function App() {
 
   if (!user) {
     return (
-      <div className="min-h-screen bg-stone-50 flex flex-col items-center justify-center p-6 font-serif">
-        <motion.div 
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="max-w-md w-full text-center space-y-8"
-        >
-          <div className="w-20 h-20 bg-stone-800 rounded-3xl flex items-center justify-center mx-auto shadow-xl rotate-3">
-            <ChefHat className="w-10 h-10 text-stone-50" />
-          </div>
-          <div className="space-y-2">
-            <h1 className="text-5xl font-bold text-stone-900 tracking-tight">Toasty</h1>
-            <p className="text-stone-500 text-lg">Your digital kitchen for family traditions.</p>
-          </div>
-          <Button onClick={signIn} className="w-full py-4 text-lg shadow-lg">
-            Sign in with Google
-          </Button>
-        </motion.div>
+      <div className="h-screen flex items-center justify-center bg-[#f5f5f0] dark:bg-stone-950">
+        <Loader2 className="w-8 h-8 animate-spin text-stone-400" />
       </div>
     );
   }
@@ -910,10 +1063,27 @@ export default function App() {
           </div>
           
           <div className="flex items-center gap-2 sm:gap-3 pl-2 sm:pl-4 border-l border-stone-200 dark:border-stone-800 flex-shrink-0">
-            <img src={user.photoURL || ''} referrerPolicy="no-referrer" className="w-7 h-7 sm:w-8 sm:h-8 rounded-full border border-stone-200 dark:border-stone-800" alt="Profile" />
-            <button onClick={logOut} className="p-1.5 sm:p-2 hover:bg-stone-200 dark:hover:bg-stone-800 rounded-full transition-colors" aria-label="Sign out">
-              <LogOut className="w-4.5 h-4.5 sm:w-5 sm:h-5 text-stone-400" />
-            </button>
+            {user.isAnonymous ? (
+              <button 
+                onClick={signIn}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-stone-850 text-stone-50 hover:bg-stone-700 dark:bg-stone-100 dark:text-stone-900 dark:hover:bg-stone-200 text-xs font-semibold transition-all shadow-sm font-sans"
+              >
+                Sign In
+              </button>
+            ) : (
+              <>
+                {user.photoURL ? (
+                  <img src={user.photoURL} referrerPolicy="no-referrer" className="w-7 h-7 sm:w-8 sm:h-8 rounded-full border border-stone-200 dark:border-stone-800" alt="Profile" />
+                ) : (
+                  <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-stone-200 dark:bg-stone-800 flex items-center justify-center text-xs font-bold text-stone-600 dark:text-stone-300 font-sans">
+                    {user.displayName?.[0] || 'U'}
+                  </div>
+                )}
+                <button onClick={logOut} className="p-1.5 sm:p-2 hover:bg-stone-200 dark:hover:bg-stone-800 rounded-full transition-colors" aria-label="Sign out">
+                  <LogOut className="w-4.5 h-4.5 sm:w-5 sm:h-5 text-stone-400" />
+                </button>
+              </>
+            )}
           </div>
         </div>
       </header>
