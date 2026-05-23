@@ -2,7 +2,12 @@ import { useState, useEffect, useRef, Component, ErrorInfo, ReactNode } from 're
 import { 
   onAuthStateChanged, 
   User,
-  signInAnonymously
+  signInAnonymously,
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  updateProfile,
+  signInWithPopup,
+  GoogleAuthProvider
 } from 'firebase/auth';
 import { 
   collection, 
@@ -24,8 +29,10 @@ import {
   auth, 
   db, 
   signIn, 
-  logOut 
+  logOut,
+  googleProvider
 } from './firebase';
+import { STOCK_RECIPES } from './stockRecipes';
 import { 
   Recipe, 
   Household, 
@@ -269,149 +276,6 @@ const Modal = ({ isOpen, onClose, title, children }: any) => {
   );
 };
 
-const STOCK_RECIPES: Partial<Recipe>[] = [
-  {
-    title: "Classic Avocado Toast",
-    category: "Breakfast",
-    rating: 5,
-    estimatedTime: 10,
-    ingredients: [
-      "2 slices of sourdough bread",
-      "1 ripe avocado",
-      "1/2 lemon, juiced",
-      "Pinch of sea salt and black pepper",
-      "Red pepper flakes (optional)",
-      "1 tbsp olive oil"
-    ],
-    instructions: [
-      "Toast the sourdough bread slices until golden brown and crispy.",
-      "In a small bowl, mash the avocado with lemon juice, salt, and pepper.",
-      "Spread the mashed avocado evenly over the toasted bread.",
-      "Drizzle with olive oil and sprinkle with red pepper flakes if desired."
-    ],
-    imageUrl: "https://images.unsplash.com/photo-1588137378633-dea1336ce1e2?auto=format&fit=crop&q=80&w=1000",
-    isStock: true
-  },
-  {
-    title: "Mediterranean Quinoa Bowl",
-    category: "Lunch",
-    rating: 4,
-    estimatedTime: 20,
-    ingredients: [
-      "1 cup cooked quinoa",
-      "1/2 cup cherry tomatoes, halved",
-      "1/4 cup cucumber, diced",
-      "1/4 cup kalamata olives, pitted",
-      "1/4 cup feta cheese, crumbled",
-      "2 tbsp hummus",
-      "1 tbsp lemon vinaigrette"
-    ],
-    instructions: [
-      "Place the cooked quinoa in the base of a bowl.",
-      "Arrange the cherry tomatoes, cucumber, olives, and feta cheese on top of the quinoa.",
-      "Add a dollop of hummus in the center.",
-      "Drizzle the lemon vinaigrette over the entire bowl before serving."
-    ],
-    imageUrl: "https://images.unsplash.com/photo-1512621776951-a57141f2eefd?auto=format&fit=crop&q=80&w=1000",
-    isStock: true
-  },
-  {
-    title: "Garlic Butter Salmon",
-    category: "Dinner",
-    rating: 5,
-    estimatedTime: 25,
-    ingredients: [
-      "2 salmon fillets",
-      "3 cloves garlic, minced",
-      "2 tbsp butter, melted",
-      "1 tbsp fresh parsley, chopped",
-      "1/2 lemon, sliced",
-      "Salt and pepper to taste"
-    ],
-    instructions: [
-      "Preheat oven to 400°F (200°C) and line a baking sheet with parchment paper.",
-      "Place salmon fillets on the baking sheet and season generously with salt and pepper.",
-      "In a small bowl, mix melted butter, minced garlic, and chopped parsley.",
-      "Brush the garlic butter mixture over the salmon fillets.",
-      "Top with lemon slices and bake for 12-15 minutes until salmon is flaky."
-    ],
-    imageUrl: "https://images.unsplash.com/photo-1519708227418-c8fd9a32b7a2?auto=format&fit=crop&q=80&w=1000",
-    isStock: true
-  },
-  {
-    title: "Fudgy Chocolate Brownies",
-    category: "Dessert",
-    rating: 5,
-    estimatedTime: 45,
-    ingredients: [
-      "1/2 cup unsalted butter, melted",
-      "1 cup granulated sugar",
-      "2 large eggs",
-      "1 tsp vanilla extract",
-      "1/3 cup cocoa powder",
-      "1/2 cup all-purpose flour",
-      "1/4 tsp salt",
-      "1/2 cup chocolate chips"
-    ],
-    instructions: [
-      "Preheat oven to 350°F (175°C) and grease an 8x8 inch baking pan.",
-      "In a large bowl, whisk together melted butter and sugar until well combined.",
-      "Beat in the eggs and vanilla extract until the mixture is smooth.",
-      "Fold in the cocoa powder, flour, and salt until just combined (do not overmix).",
-      "Stir in the chocolate chips.",
-      "Pour the batter into the prepared pan and bake for 20-25 minutes.",
-      "Let cool completely before cutting into squares."
-    ],
-    imageUrl: "https://images.unsplash.com/photo-1606313564200-e75d5e30476c?auto=format&fit=crop&q=80&w=1000",
-    isStock: true
-  },
-  {
-    title: "Spicy Roasted Chickpeas",
-    category: "Snack",
-    rating: 4,
-    estimatedTime: 35,
-    ingredients: [
-      "1 can (15 oz) chickpeas, rinsed and thoroughly dried",
-      "1 tbsp olive oil",
-      "1 tsp smoked paprika",
-      "1/2 tsp garlic powder",
-      "1/4 tsp cayenne pepper",
-      "1/2 tsp sea salt"
-    ],
-    instructions: [
-      "Preheat oven to 400°F (200°C) and line a baking sheet with parchment paper.",
-      "Ensure chickpeas are completely dry to ensure crispiness.",
-      "Toss the chickpeas with olive oil, paprika, garlic powder, cayenne pepper, and salt.",
-      "Spread them in a single layer on the baking sheet.",
-      "Roast for 25-30 minutes, shaking the pan halfway through, until crispy.",
-      "Let cool slightly before serving."
-    ],
-    imageUrl: "https://images.unsplash.com/photo-1515543904379-3d757afe72e4?auto=format&fit=crop&q=80&w=1000",
-    isStock: true
-  },
-  {
-    title: "Refreshing Berry Smoothie",
-    category: "Drink",
-    rating: 5,
-    estimatedTime: 5,
-    ingredients: [
-      "1 cup mixed frozen berries (strawberries, blueberries, raspberries)",
-      "1/2 cup Greek yogurt",
-      "1/2 cup almond milk",
-      "1 tbsp honey or maple syrup",
-      "1/2 banana"
-    ],
-    instructions: [
-      "Add all ingredients into a blender.",
-      "Blend on high speed until smooth and creamy.",
-      "If the smoothie is too thick, add a splash more almond milk.",
-      "Pour into a glass and serve immediately."
-    ],
-    imageUrl: "https://images.unsplash.com/photo-1553530666-ba11a7da3888?auto=format&fit=crop&q=80&w=1000",
-    isStock: true
-  }
-];
-
 // --- Main App ---
 
 export default function App() {
@@ -465,6 +329,117 @@ export default function App() {
   const [isFirstFamilyModalOpen, setIsFirstFamilyModalOpen] = useState(false);
   const [recipeFormError, setRecipeFormError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+
+  // --- Auth Flow States ---
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [authEmail, setAuthEmail] = useState('');
+  const [authPassword, setAuthPassword] = useState('');
+  const [authName, setAuthName] = useState('');
+  const [authTab, setAuthTab] = useState<'signin' | 'signup'>('signin');
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [authSuccessMsg, setAuthSuccessMsg] = useState<string | null>(null);
+  const [isAuthSubmitLoading, setIsAuthSubmitLoading] = useState(false);
+
+  const handleEmailSignUp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!authEmail || !authPassword || !authName) {
+      setAuthError("Please fill in all fields.");
+      return;
+    }
+    setAuthError(null);
+    setAuthSuccessMsg(null);
+    setIsAuthSubmitLoading(true);
+
+    try {
+      const userCredential = await createUserWithEmailAndPassword(auth, authEmail, authPassword);
+      await updateProfile(userCredential.user, {
+        displayName: authName
+      });
+      setAuthSuccessMsg("Account created successfully! Welcome to Toasty.");
+      setTimeout(() => {
+        setIsAuthModalOpen(false);
+        // Reset states
+        setAuthEmail('');
+        setAuthPassword('');
+        setAuthName('');
+        setAuthSuccessMsg(null);
+      }, 1500);
+    } catch (err: any) {
+      console.error("Sign up error:", err);
+      if (err.code === 'auth/operation-not-allowed') {
+        setAuthError("Email/Password Sign-In is not enabled yet in your Firebase console. Please go to your Firebase Console under 'Authentication' > 'Sign-in method' and enable the Email/Password provider!");
+      } else if (err.code === 'auth/email-already-in-use') {
+        setAuthError("This email address is already registered. Please sign in instead.");
+      } else if (err.code === 'auth/weak-password') {
+        setAuthError("Your password is too weak. Please use at least 6 characters.");
+      } else if (err.code === 'auth/invalid-email') {
+        setAuthError("Please provide a valid email address.");
+      } else {
+        setAuthError(err.message || "An error occurred during sign up.");
+      }
+    } finally {
+      setIsAuthSubmitLoading(false);
+    }
+  };
+
+  const handleEmailSignIn = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!authEmail || !authPassword) {
+      setAuthError("Please fill in all fields.");
+      return;
+    }
+    setAuthError(null);
+    setAuthSuccessMsg(null);
+    setIsAuthSubmitLoading(true);
+
+    try {
+      await signInWithEmailAndPassword(auth, authEmail, authPassword);
+      setAuthSuccessMsg("Successfully signed in!");
+      setTimeout(() => {
+        setIsAuthModalOpen(false);
+        // Reset states
+        setAuthEmail('');
+        setAuthPassword('');
+        setAuthSuccessMsg(null);
+      }, 1500);
+    } catch (err: any) {
+      console.error("Sign in error:", err);
+      if (err.code === 'auth/operation-not-allowed') {
+        setAuthError("Email/Password Sign-In is not enabled yet in your Firebase console. Please go to your Firebase Console under 'Authentication' > 'Sign-in method' and enable the Email/Password provider!");
+      } else if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
+        setAuthError("Invalid email or password. Please try again or create an account.");
+      } else if (err.code === 'auth/invalid-email') {
+        setAuthError("Please provide a valid email address.");
+      } else {
+        setAuthError(err.message || "An error occurred during sign in.");
+      }
+    } finally {
+      setIsAuthSubmitLoading(false);
+    }
+  };
+
+  const handleGoogleSignInInModal = async () => {
+    setAuthError(null);
+    setAuthSuccessMsg(null);
+    setIsAuthSubmitLoading(true);
+    try {
+      await signInWithPopup(auth, googleProvider);
+      setAuthSuccessMsg("Successfully signed in with Google!");
+      setTimeout(() => {
+        setIsAuthModalOpen(false);
+        setAuthSuccessMsg(null);
+      }, 1500);
+    } catch (err: any) {
+      console.error("Google popup error:", err);
+      if (err.code === 'auth/popup-blocked') {
+        setAuthError("The sign-in popup was blocked by your browser. For standard Google Sign-In, please allow popups, or open this application in a new tab using the button in the top-right! Alternatively, use the Email Sign In options below.");
+      } else {
+        setAuthError("Google Sign-In was cancelled or failed in this iframe preview. We highly recommend using the Email/Password sign up & sign in options below, which work seamlessly in previews!");
+      }
+    } finally {
+      setIsAuthSubmitLoading(false);
+    }
+  };
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (u) => {
@@ -638,13 +613,41 @@ export default function App() {
       if (stored) {
         try {
           const r = JSON.parse(stored);
-          setRecipes(r);
+          // Auto-seed missing STOCK_RECIPES to ensure homepage contains over 50 exquisite dishes
+          if (r.length < 20) {
+            const merged = [...r];
+            const presentTitles = new Set(r.map((itm: any) => itm.title.toLowerCase()));
+            STOCK_RECIPES.forEach((stock, sIdx) => {
+              if (!presentTitles.has(stock.title.toLowerCase())) {
+                merged.push({
+                  ...stock,
+                  id: `local-recipe-${selectedHousehold.id}-${Date.now()}-${sIdx}`,
+                  authorId: 'local-guest-user',
+                  householdId: selectedHousehold.id,
+                  createdAt: Timestamp.now()
+                } as Recipe);
+              }
+            });
+            localStorage.setItem(key, JSON.stringify(merged));
+            setRecipes(merged);
+          } else {
+            setRecipes(r);
+          }
           return;
         } catch (e) {
           console.error("Error parsing local recipes:", e);
         }
       }
-      setRecipes([]);
+      // Seeding for brand new guest household
+      const defaultRecipes = STOCK_RECIPES.map((r, idx) => ({
+        ...r,
+        id: `local-recipe-${selectedHousehold.id}-${idx}`,
+        authorId: 'local-guest-user',
+        householdId: selectedHousehold.id,
+        createdAt: Timestamp.now()
+      }));
+      localStorage.setItem(key, JSON.stringify(defaultRecipes));
+      setRecipes(defaultRecipes as Recipe[]);
       return;
     }
     const q = query(collection(db, 'recipes'), where('householdId', '==', selectedHousehold.id));
@@ -862,6 +865,66 @@ export default function App() {
     }
   };
 
+  const handleImportMoreRecipes = async () => {
+    if (!user || !selectedHousehold) return;
+    setIsProcessing(true);
+    
+    // Create a set of already existing titles to avoid duplication
+    const existingTitles = new Set(recipes.map(r => r.title.toLowerCase()));
+    
+    if (user.uid === 'local-guest-user') {
+      const key = `toasty_recipes_${selectedHousehold.id}`;
+      const updatedRecipes = [...recipes];
+      
+      STOCK_RECIPES.forEach((stock, idx) => {
+        if (!existingTitles.has(stock.title.toLowerCase())) {
+          updatedRecipes.push({
+            ...stock,
+            id: `local-recipe-${selectedHousehold.id}-${Date.now()}-${idx}`,
+            authorId: 'local-guest-user',
+            householdId: selectedHousehold.id,
+            createdAt: Timestamp.now()
+          } as Recipe);
+        }
+      });
+      
+      localStorage.setItem(key, JSON.stringify(updatedRecipes));
+      setRecipes(updatedRecipes);
+      setIsProcessing(false);
+      alert("Imported and synced 50+ beautiful dishes with photos!");
+      return;
+    }
+    
+    // For cloud Firestore users
+    try {
+      let writeCount = 0;
+      const promises = [];
+      for (const stock of STOCK_RECIPES) {
+        if (!existingTitles.has(stock.title.toLowerCase())) {
+          promises.push(
+            addDoc(collection(db, 'recipes'), {
+              ...stock,
+              authorId: user.uid,
+              householdId: selectedHousehold.id,
+              createdAt: serverTimestamp()
+            })
+          );
+          writeCount++;
+        }
+      }
+      
+      if (promises.length > 0) {
+        await Promise.all(promises);
+      }
+      alert(`Successfully imported ${writeCount} new master chef recipes to your account!`);
+    } catch (error) {
+      console.error("Error importing recipes to Firestore:", error);
+      alert("Failed to import some cloud recipes. Please check your network connection.");
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   const handleImport = async () => {
     if (!importUrl) return;
     setIsProcessing(true);
@@ -1065,7 +1128,7 @@ export default function App() {
           <div className="flex items-center gap-2 sm:gap-3 pl-2 sm:pl-4 border-l border-stone-200 dark:border-stone-800 flex-shrink-0">
             {user.isAnonymous ? (
               <button 
-                onClick={signIn}
+                onClick={() => { setAuthError(null); setAuthSuccessMsg(null); setAuthTab('signin'); setIsAuthModalOpen(true); }}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-stone-850 text-stone-50 hover:bg-stone-700 dark:bg-stone-100 dark:text-stone-900 dark:hover:bg-stone-200 text-xs font-semibold transition-all shadow-sm font-sans"
               >
                 Sign In
@@ -1137,6 +1200,28 @@ export default function App() {
             ))}
           </div>
         </section>
+
+        {recipes.length > 0 && recipes.length < 20 && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="p-5 sm:p-6 bg-stone-900 text-stone-100 dark:bg-stone-100 dark:text-stone-900 border border-stone-800 dark:border-stone-200 rounded-2xl sm:rounded-3xl flex flex-col md:flex-row items-center justify-between gap-4 shadow-xl"
+          >
+            <div className="space-y-1 text-center md:text-left">
+              <h4 className="font-serif font-bold text-base sm:text-xl text-stone-100 dark:text-stone-900">Synchronize Global Masterclass Recipes</h4>
+              <p className="text-xs sm:text-sm text-stone-400 dark:text-stone-500 max-w-2xl font-sans font-light">
+                Expand your homepage with 50+ beautiful culinary delicacies, hand-curated by our chefs with step-by-step instructions and high-resolution visuals.
+              </p>
+            </div>
+            <Button 
+              onClick={handleImportMoreRecipes} 
+              disabled={isProcessing}
+              className="w-full md:w-auto px-6 py-3.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white dark:bg-stone-800 dark:text-stone-100 dark:hover:bg-stone-700 text-xs sm:text-sm font-semibold shadow-md whitespace-nowrap flex items-center justify-center gap-2 transition-all shrink-0 active:scale-95"
+            >
+              <Sparkles className="w-4 h-4 text-amber-200 animate-pulse" /> Import 50+ Recipes
+            </Button>
+          </motion.div>
+        )}
 
         {/* Recipe Grid */}
         <section className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-6">
@@ -1588,6 +1673,153 @@ export default function App() {
           <Button className="w-full py-4 mt-4" onClick={() => setIsFirstFamilyModalOpen(false)}>
             Start Cooking
           </Button>
+        </div>
+      </Modal>
+
+      {/* Custom Auth Modal */}
+      <Modal isOpen={isAuthModalOpen} onClose={() => setIsAuthModalOpen(false)} title="Sign In & Sign Up">
+        <div className="space-y-6">
+          <div className="flex bg-stone-100 dark:bg-stone-800 p-1 rounded-xl">
+            <button 
+              onClick={() => { setAuthTab('signin'); setAuthError(null); setAuthSuccessMsg(null); }}
+              className={cn(
+                "flex-1 py-2 text-sm font-semibold rounded-lg transition-all",
+                authTab === 'signin' 
+                  ? "bg-white dark:bg-stone-900 text-stone-900 dark:text-stone-50 shadow-sm" 
+                  : "text-stone-500 hover:text-stone-800 dark:hover:text-stone-300"
+              )}
+            >
+              Sign In
+            </button>
+            <button 
+              onClick={() => { setAuthTab('signup'); setAuthError(null); setAuthSuccessMsg(null); }}
+              className={cn(
+                "flex-1 py-2 text-sm font-semibold rounded-lg transition-all",
+                authTab === 'signup' 
+                  ? "bg-white dark:bg-stone-900 text-stone-900 dark:text-stone-50 shadow-sm" 
+                  : "text-stone-500 hover:text-stone-800 dark:hover:text-stone-300"
+              )}
+            >
+              Create Account
+            </button>
+          </div>
+
+          {authError && (
+            <div className="p-3.5 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900/50 rounded-xl text-red-600 dark:text-red-400 text-xs sm:text-sm font-medium leading-relaxed">
+              {authError}
+            </div>
+          )}
+
+          {authSuccessMsg && (
+            <div className="p-3.5 bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-900/50 rounded-xl text-green-600 dark:text-green-400 text-xs sm:text-sm font-medium">
+              {authSuccessMsg}
+            </div>
+          )}
+
+          <div className="space-y-4">
+            <Button 
+              onClick={handleGoogleSignInInModal}
+              disabled={isAuthSubmitLoading}
+              variant="outline"
+              className="w-full py-3 text-sm font-semibold hover:bg-stone-100 dark:hover:bg-stone-800 border-stone-200 dark:border-stone-700 flex items-center justify-center gap-2"
+            >
+              <svg className="w-4 h-4 mr-1.5" viewBox="0 0 24 24">
+                <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22c-.22-.67-.35-1.37-.35-2.09z" />
+                <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
+              </svg>
+              Continue with Google
+            </Button>
+
+            <div className="flex items-center gap-3">
+              <hr className="flex-1 border-stone-200 dark:border-stone-800" />
+              <span className="text-xs font-bold text-stone-400 uppercase tracking-widest">or use email</span>
+              <hr className="flex-1 border-stone-200 dark:border-stone-800" />
+            </div>
+
+            {authTab === 'signin' ? (
+              <form onSubmit={handleEmailSignIn} className="space-y-4">
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-stone-400 uppercase tracking-wider block">Email Address</label>
+                  <input 
+                    type="email" 
+                    required
+                    placeholder="you@example.com"
+                    value={authEmail}
+                    onChange={(e) => setAuthEmail(e.target.value)}
+                    className="w-full px-4 py-3 rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 text-stone-800 dark:text-stone-100 placeholder-stone-400 outline-none focus:ring-2 focus:ring-stone-600/10 transition-all text-sm"
+                  />
+                </div>
+                
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-stone-400 uppercase tracking-wider block">Password</label>
+                  <input 
+                    type="password" 
+                    required
+                    placeholder="Enter your password"
+                    value={authPassword}
+                    onChange={(e) => setAuthPassword(e.target.value)}
+                    className="w-full px-4 py-3 rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 text-stone-800 dark:text-stone-100 placeholder-stone-400 outline-none focus:ring-2 focus:ring-stone-600/10 transition-all text-sm"
+                  />
+                </div>
+
+                <Button 
+                  type="submit" 
+                  disabled={isAuthSubmitLoading}
+                  className="w-full py-4 text-sm font-semibold rounded-xl bg-stone-800 dark:bg-stone-100 text-stone-50 dark:text-stone-900"
+                >
+                  {isAuthSubmitLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : "Sign In with Email"}
+                </Button>
+              </form>
+            ) : (
+              <form onSubmit={handleEmailSignUp} className="space-y-4">
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-stone-400 uppercase tracking-wider block">Full Name</label>
+                  <input 
+                    type="text" 
+                    required
+                    placeholder="Your Chef Name"
+                    value={authName}
+                    onChange={(e) => setAuthName(e.target.value)}
+                    className="w-full px-4 py-3 rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 text-stone-800 dark:text-stone-100 placeholder-stone-400 outline-none focus:ring-2 focus:ring-stone-600/10 transition-all text-sm"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-stone-400 uppercase tracking-wider block">Email Address</label>
+                  <input 
+                    type="email" 
+                    required
+                    placeholder="you@example.com"
+                    value={authEmail}
+                    onChange={(e) => setAuthEmail(e.target.value)}
+                    className="w-full px-4 py-3 rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 text-stone-800 dark:text-stone-100 placeholder-stone-400 outline-none focus:ring-2 focus:ring-stone-600/10 transition-all text-sm"
+                  />
+                </div>
+                
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-stone-400 uppercase tracking-wider block">Password</label>
+                  <input 
+                    type="password" 
+                    required
+                    placeholder="At least 6 characters"
+                    value={authPassword}
+                    onChange={(e) => setAuthPassword(e.target.value)}
+                    className="w-full px-4 py-3 rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 text-stone-800 dark:text-stone-100 placeholder-stone-400 outline-none focus:ring-2 focus:ring-stone-600/10 transition-all text-sm"
+                  />
+                </div>
+
+                <Button 
+                  type="submit" 
+                  disabled={isAuthSubmitLoading}
+                  className="w-full py-4 text-sm font-semibold rounded-xl bg-stone-800 dark:bg-stone-100 text-stone-50 dark:text-stone-900"
+                >
+                  {isAuthSubmitLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : "Create Account"}
+                </Button>
+              </form>
+            )}
+          </div>
         </div>
       </Modal>
     </div>
