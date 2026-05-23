@@ -38,6 +38,7 @@ import {
   Household, 
   Category 
 } from './types';
+import { RecipeImage } from './components/RecipeImage';
 import { 
   extractRecipeFromUrl,
   generateRecipe,
@@ -516,7 +517,13 @@ export default function App() {
         try {
           await signInAnonymously(auth);
         } catch (error) {
-          console.error("Anonymous authentication failed, using fallback guest user:", error);
+          // Explaining resolution for auth/admin-restricted-operation when Anonymous provider is disabled.
+          console.warn(
+            "[Toasty Auth Support] Anonymous authentication is disabled in your Firebase Console. " +
+            "To enable true server-side anonymous users, visit your Firebase Console -> Authentication -> Sign-in Method, " +
+            "and enable the 'Anonymous' provider. Falling back to an exquisite, fully-functional local guest session.",
+            error
+          );
           setUser({
             uid: 'local-guest-user',
             displayName: 'Guest Chef',
@@ -1239,18 +1246,12 @@ export default function App() {
               >
                 <Card className="h-full flex flex-col gap-2.5 sm:gap-4 overflow-hidden p-0 border-stone-200 dark:border-stone-800">
                   <div className="aspect-[4/3] bg-stone-200 dark:bg-stone-800 relative overflow-hidden">
-                    {recipe.imageUrl ? (
-                      <img 
-                        src={recipe.imageUrl} 
-                        referrerPolicy="no-referrer"
-                        className="w-full h-full object-cover transition-transform group-hover:scale-105" 
-                        alt={recipe.title} 
-                      />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center text-stone-400 dark:text-stone-600">
-                        <Utensils className="w-8 h-8 sm:w-12 sm:h-12 opacity-20" />
-                      </div>
-                    )}
+                    <RecipeImage 
+                      src={recipe.imageUrl} 
+                      category={recipe.category} 
+                      alt={recipe.title} 
+                      className="transition-transform duration-300 group-hover:scale-105" 
+                    />
                     <div className="absolute top-2 right-2 sm:top-4 sm:right-4 px-2 py-0.5 sm:px-3 sm:py-1 rounded-full bg-white/90 dark:bg-stone-900/90 backdrop-blur-sm text-[9px] sm:text-xs font-bold uppercase tracking-wider text-stone-800 dark:text-stone-100 shadow-sm">
                       {recipe.category}
                     </div>
@@ -1314,16 +1315,14 @@ export default function App() {
             )}
           </div>
 
-          {viewingRecipe?.imageUrl && (
-            <div className="aspect-video w-full overflow-hidden rounded-xl sm:rounded-2xl bg-stone-100 dark:bg-stone-800 shadow-inner">
-              <img 
-                src={viewingRecipe.imageUrl} 
-                referrerPolicy="no-referrer"
-                className="w-full h-full object-cover" 
-                alt={viewingRecipe.title} 
-              />
-            </div>
-          )}
+          <div className="aspect-video w-full overflow-hidden rounded-xl sm:rounded-2xl bg-stone-100 dark:bg-stone-800 shadow-inner">
+            <RecipeImage 
+              src={viewingRecipe?.imageUrl} 
+              category={viewingRecipe?.category} 
+              alt={viewingRecipe?.title || 'Recipe Detail Image'} 
+              className="w-full h-full object-cover" 
+            />
+          </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5 sm:gap-8">
             <div className="md:col-span-1 space-y-3 sm:space-y-4">
